@@ -1,5 +1,5 @@
-use std::time::Duration;
 use std::marker::PhantomData;
+use std::time::Duration;
 
 use actix::*;
 use actix_web::*;
@@ -7,16 +7,17 @@ use http::header;
 use serde_json;
 
 use context::ChannelItem;
-use protocol::{Frame, CloseCode};
-use utils::SockjsHeaders;
-use session::Session;
 use manager::{Broadcast, Record, SessionManager};
+use protocol::{CloseCode, Frame};
+use session::Session;
+use utils::SockjsHeaders;
 
-use super::{Transport, SendResult, Flags};
-
+use super::{Flags, SendResult, Transport};
 
 pub struct EventSource<S, SM>
-    where S: Session, SM: SessionManager<S>,
+where
+    S: Session,
+    SM: SessionManager<S>,
 {
     s: PhantomData<S>,
     sm: PhantomData<SM>,
@@ -27,7 +28,9 @@ pub struct EventSource<S, SM>
 }
 
 impl<S, SM> EventSource<S, SM>
-    where S: Session, SM: SessionManager<S>,
+where
+    S: Session,
+    SM: SessionManager<S>,
 {
     fn hb(&self, ctx: &mut HttpContext<Self, Addr<Syn, SM>>) {
         ctx.run_later(Duration::new(5, 0), |act, ctx| {
@@ -36,8 +39,7 @@ impl<S, SM> EventSource<S, SM>
         });
     }
 
-    pub fn init(req: HttpRequest<Addr<Syn, SM>>, maxsize: usize) -> Result<HttpResponse>
-    {
+    pub fn init(req: HttpRequest<Addr<Syn, SM>>, maxsize: usize) -> Result<HttpResponse> {
         let session = req.match_info().get("session").unwrap().to_owned();
         let mut resp = HttpResponse::Ok()
             .header(header::CONTENT_TYPE, "text/event-stream")
@@ -48,20 +50,26 @@ impl<S, SM> EventSource<S, SM>
             .take();
 
         let mut ctx = HttpContext::new(
-            req, EventSource{s: PhantomData,
-                             sm: PhantomData,
-                             size: 0, rec: None,
-                             flags: Flags::empty(),
-                             maxsize});
+            req,
+            EventSource {
+                s: PhantomData,
+                sm: PhantomData,
+                size: 0,
+                rec: None,
+                flags: Flags::empty(),
+                maxsize,
+            },
+        );
         ctx.write("\r\n");
 
         // init transport, but aftre prelude only
-        ctx.drain().map(move |_, _, ctx| {
-            ctx.run_later(Duration::new(0, 1_200_000), move |act, ctx| {
-                act.hb(ctx);
-                act.init_transport(session, ctx);
-            });
-        }).wait(&mut ctx);
+        ctx.drain()
+            .map(move |_, _, ctx| {
+                ctx.run_later(Duration::new(0, 1_200_000), move |act, ctx| {
+                    act.hb(ctx);
+                    act.init_transport(session, ctx);
+                });
+            }).wait(&mut ctx);
 
         Ok(resp.body(ctx))
     }
@@ -69,7 +77,9 @@ impl<S, SM> EventSource<S, SM>
 
 // Http actor implementation
 impl<S, SM> Actor for EventSource<S, SM>
-    where S: Session, SM: SessionManager<S>
+where
+    S: Session,
+    SM: SessionManager<S>,
 {
     type Context = HttpContext<Self, Addr<Syn, SM>>;
 
@@ -81,16 +91,16 @@ impl<S, SM> Actor for EventSource<S, SM>
 
 // Transport implementation
 impl<S, SM> Transport<S, SM> for EventSource<S, SM>
-    where S: Session, SM: SessionManager<S>,
+where
+    S: Session,
+    SM: SessionManager<S>,
 {
-    fn send(&mut self, ctx: &mut Self::Context, msg: &Frame, rec: &mut Record)
-            -> SendResult
-    {
+    fn send(&mut self, ctx: &mut Self::Context, msg: &Frame, rec: &mut Record) -> SendResult {
         self.size += match *msg {
             Frame::Heartbeat => {
                 ctx.write("data: h\r\n\r\n");
                 11
-            },
+            }
             Frame::Message(ref s) => {
                 let blob = serde_json::to_string(&s).unwrap();
                 let size = blob.len();
@@ -106,18 +116,20 @@ impl<S, SM> Transport<S, SM> for EventSource<S, SM>
                 ctx.write("\r\n\r\n");
                 size + 11
             }
-            Frame::MessageBlob(_) => {
-                unimplemented!()
-            }
+            Frame::MessageBlob(_) => unimplemented!(),
             Frame::Open => {
                 ctx.write("data: o\r\n\r\n");
                 11
-            },
+            }
             Frame::Close(code) => {
                 rec.close();
-                ctx.write(format!("data: c[{}, {:?}]\r\n\r\n", code.num(), code.reason()));
+                ctx.write(format!(
+                    "data: c[{}, {:?}]\r\n\r\n",
+                    code.num(),
+                    code.reason()
+                ));
                 ctx.write_eof();
-                return SendResult::Stop
+                return SendResult::Stop;
             }
         };
 
@@ -148,7 +160,9 @@ impl<S, SM> Transport<S, SM> for EventSource<S, SM>
 }
 
 impl<S, SM> Handler<ChannelItem> for EventSource<S, SM>
-    where S: Session, SM: SessionManager<S>,
+where
+    S: Session,
+    SM: SessionManager<S>,
 {
     type Result = ();
 
@@ -158,7 +172,9 @@ impl<S, SM> Handler<ChannelItem> for EventSource<S, SM>
 }
 
 impl<S, SM> Handler<Broadcast> for EventSource<S, SM>
-    where S: Session, SM: SessionManager<S>,
+where
+    S: Session,
+    SM: SessionManager<S>,
 {
     type Result = ();
 

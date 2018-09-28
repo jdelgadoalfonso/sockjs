@@ -1,19 +1,18 @@
-use std::time::Duration;
 use std::marker::PhantomData;
+use std::time::Duration;
 
 use actix::*;
-use actix_web::*;
-use actix_web::http::Method;
 use actix_web::http::header::ACCESS_CONTROL_ALLOW_METHODS;
+use actix_web::http::Method;
+use actix_web::*;
 
 use context::ChannelItem;
-use protocol::{Frame, CloseCode};
-use utils::SockjsHeaders;
-use session::Session;
 use manager::{Broadcast, Record, SessionManager};
+use protocol::{CloseCode, Frame};
+use session::Session;
+use utils::SockjsHeaders;
 
-use super::{Transport, SendResult, Flags};
-
+use super::{Flags, SendResult, Transport};
 
 const OPEN_SEQ: &str =
     "hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh\
@@ -48,7 +47,9 @@ const OPEN_SEQ: &str =
      hhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhhh\n";
 
 pub struct XhrStreaming<S, SM>
-    where S: Session, SM: SessionManager<S>,
+where
+    S: Session,
+    SM: SessionManager<S>,
 {
     s: PhantomData<S>,
     sm: PhantomData<SM>,
@@ -58,20 +59,22 @@ pub struct XhrStreaming<S, SM>
     rec: Option<Record>,
 }
 
-impl<S, SM> XhrStreaming<S, SM> where S: Session, SM: SessionManager<S> {
-
+impl<S, SM> XhrStreaming<S, SM>
+where
+    S: Session,
+    SM: SessionManager<S>,
+{
     pub fn init(req: HttpRequest<Addr<Syn, SM>>, maxsize: usize) -> Result<HttpResponse> {
         if *req.method() == Method::OPTIONS {
-            return Ok(
-                HttpResponse::NoContent()
-                    .content_type("application/jsonscript; charset=UTF-8")
-                    .header(ACCESS_CONTROL_ALLOW_METHODS, "OPTIONS, POST")
-                    .sockjs_cache_headers()
-                    .sockjs_cors_headers(req.headers())
-                    .sockjs_session_cookie(&req)
-                    .finish())
+            return Ok(HttpResponse::NoContent()
+                .content_type("application/jsonscript; charset=UTF-8")
+                .header(ACCESS_CONTROL_ALLOW_METHODS, "OPTIONS, POST")
+                .sockjs_cache_headers()
+                .sockjs_cors_headers(req.headers())
+                .sockjs_session_cookie(&req)
+                .finish());
         } else if *req.method() != Method::POST {
-            return Ok(HttpResponse::NotFound().into())
+            return Ok(HttpResponse::NotFound().into());
         }
 
         let session = req.match_info().get("session").unwrap().to_owned();
@@ -84,20 +87,25 @@ impl<S, SM> XhrStreaming<S, SM> where S: Session, SM: SessionManager<S> {
             .take();
 
         let mut ctx = HttpContext::new(
-            req, XhrStreaming{maxsize,
-                              s: PhantomData,
-                              sm: PhantomData,
-                              size: 0,
-                              flags: Flags::empty(),
-                              rec: None});
+            req,
+            XhrStreaming {
+                maxsize,
+                s: PhantomData,
+                sm: PhantomData,
+                size: 0,
+                flags: Flags::empty(),
+                rec: None,
+            },
+        );
         ctx.write(OPEN_SEQ);
 
         // init transport, but aftre prelude only
-        ctx.drain().map(move |_, _, ctx| {
-            ctx.run_later(Duration::new(0, 1_200_000), move |act, ctx| {
-                act.init_transport(session, ctx);
-            });
-        }).wait(&mut ctx);
+        ctx.drain()
+            .map(move |_, _, ctx| {
+                ctx.run_later(Duration::new(0, 1_200_000), move |act, ctx| {
+                    act.init_transport(session, ctx);
+                });
+            }).wait(&mut ctx);
 
         Ok(resp.body(ctx))
     }
@@ -105,7 +113,9 @@ impl<S, SM> XhrStreaming<S, SM> where S: Session, SM: SessionManager<S> {
 
 // Http actor implementation
 impl<S, SM> Actor for XhrStreaming<S, SM>
-    where S: Session, SM: SessionManager<S>
+where
+    S: Session,
+    SM: SessionManager<S>,
 {
     type Context = HttpContext<Self, Addr<Syn, SM>>;
 
@@ -117,17 +127,16 @@ impl<S, SM> Actor for XhrStreaming<S, SM>
 
 // Transport implementation
 impl<S, SM> Transport<S, SM> for XhrStreaming<S, SM>
-    where S: Session, SM: SessionManager<S>,
+where
+    S: Session,
+    SM: SessionManager<S>,
 {
-    fn send(&mut self,
-            ctx: &mut Self::Context,
-            msg: &Frame, record: &mut Record) -> SendResult
-    {
+    fn send(&mut self, ctx: &mut Self::Context, msg: &Frame, record: &mut Record) -> SendResult {
         self.size += match *msg {
             Frame::Heartbeat => {
                 ctx.write("h\n");
                 2
-            },
+            }
             Frame::Message(ref s) => {
                 let s = format!("a[{:?}]\n", s);
                 let size = s.len();
@@ -147,7 +156,7 @@ impl<S, SM> Transport<S, SM> for XhrStreaming<S, SM>
             Frame::Open => {
                 ctx.write("o\n");
                 2
-            },
+            }
             Frame::Close(code) => {
                 record.close();
                 ctx.write(format!("c[{},{:?}]\n", code.num(), code.reason()));
@@ -182,7 +191,9 @@ impl<S, SM> Transport<S, SM> for XhrStreaming<S, SM>
 }
 
 impl<S, SM> Handler<ChannelItem> for XhrStreaming<S, SM>
-    where S: Session, SM: SessionManager<S>,
+where
+    S: Session,
+    SM: SessionManager<S>,
 {
     type Result = ();
 
@@ -192,7 +203,9 @@ impl<S, SM> Handler<ChannelItem> for XhrStreaming<S, SM>
 }
 
 impl<S, SM> Handler<Broadcast> for XhrStreaming<S, SM>
-    where S: Session, SM: SessionManager<S>,
+where
+    S: Session,
+    SM: SessionManager<S>,
 {
     type Result = ();
 

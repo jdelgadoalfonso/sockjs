@@ -162,8 +162,7 @@ where
                             self.rng.borrow_mut().gen::<u32>(),
                             !self.disabled_transports.contains("websocket"),
                             self.cookie_needed,
-                        ))
-                        .into()
+                        )).into()
                 } else if *req.method() == Method::OPTIONS {
                     HttpResponse::NoContent()
                         .content_type("application/json;charset=UTF-8")

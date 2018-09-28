@@ -1,22 +1,23 @@
 use std::marker::PhantomData;
 
 use actix::*;
-use actix_web::*;
 use actix_web::http::Method;
-use serde_json;
+use actix_web::*;
 use http::header::{self, ACCESS_CONTROL_ALLOW_METHODS};
+use serde_json;
 
 use context::ChannelItem;
-use protocol::{Frame, CloseCode};
-use utils::SockjsHeaders;
-use session::Session;
 use manager::{Broadcast, Record, SessionManager};
+use protocol::{CloseCode, Frame};
+use session::Session;
+use utils::SockjsHeaders;
 
-use super::{Transport, SendResult, Flags};
-
+use super::{Flags, SendResult, Transport};
 
 pub struct Xhr<S, SM>
-    where S: Session, SM: SessionManager<S>,
+where
+    S: Session,
+    SM: SessionManager<S>,
 {
     s: PhantomData<S>,
     sm: PhantomData<SM>,
@@ -26,7 +27,9 @@ pub struct Xhr<S, SM>
 
 // Http actor implementation
 impl<S, SM> Actor for Xhr<S, SM>
-    where S: Session, SM: SessionManager<S>
+where
+    S: Session,
+    SM: SessionManager<S>,
 {
     type Context = HttpContext<Self, Addr<Syn, SM>>;
 
@@ -38,14 +41,15 @@ impl<S, SM> Actor for Xhr<S, SM>
 
 // Transport implementation
 impl<S, SM> Transport<S, SM> for Xhr<S, SM>
-    where S: Session, SM: SessionManager<S>,
+where
+    S: Session,
+    SM: SessionManager<S>,
 {
-    fn send(&mut self, ctx: &mut Self::Context, msg: &Frame, record: &mut Record) -> SendResult
-    {
+    fn send(&mut self, ctx: &mut Self::Context, msg: &Frame, record: &mut Record) -> SendResult {
         match *msg {
             Frame::Heartbeat => {
                 ctx.write("h\n");
-            },
+            }
             Frame::Message(ref s) => {
                 ctx.write("a[");
                 ctx.write(serde_json::to_string(s).unwrap());
@@ -56,12 +60,10 @@ impl<S, SM> Transport<S, SM> for Xhr<S, SM>
                 ctx.write(s);
                 ctx.write("\n");
             }
-            Frame::MessageBlob(_) => {
-                unimplemented!()
-            }
+            Frame::MessageBlob(_) => unimplemented!(),
             Frame::Open => {
                 ctx.write("o\n");
-            },
+            }
             Frame::Close(code) => {
                 record.close();
                 let blob = format!("c[{},{:?}]\n", code.num(), code.reason());
@@ -93,28 +95,29 @@ impl<S, SM> Transport<S, SM> for Xhr<S, SM>
 }
 
 impl<S, SM> Xhr<S, SM>
-    where S: Session, SM: SessionManager<S>,
+where
+    S: Session,
+    SM: SessionManager<S>,
 {
-    pub fn init(req: HttpRequest<Addr<Syn, SM>>) -> Result<HttpResponse>
-    {
+    pub fn init(req: HttpRequest<Addr<Syn, SM>>) -> Result<HttpResponse> {
         if *req.method() == Method::OPTIONS {
-            return Ok(
-                HttpResponse::NoContent()
-                    .content_type("application/jsonscript; charset=UTF-8")
-                    .header(ACCESS_CONTROL_ALLOW_METHODS, "OPTIONS, POST")
-                    .sockjs_cache_headers()
-                    .sockjs_cors_headers(req.headers())
-                    .sockjs_session_cookie(&req)
-                    .finish())
-        }
-        else if *req.method() != Method::POST {
-            return Ok(HttpResponse::NotFound().into())
+            return Ok(HttpResponse::NoContent()
+                .content_type("application/jsonscript; charset=UTF-8")
+                .header(ACCESS_CONTROL_ALLOW_METHODS, "OPTIONS, POST")
+                .sockjs_cache_headers()
+                .sockjs_cors_headers(req.headers())
+                .sockjs_session_cookie(&req)
+                .finish());
+        } else if *req.method() != Method::POST {
+            return Ok(HttpResponse::NotFound().into());
         }
 
         let session = req.match_info().get("session").unwrap().to_owned();
         let mut resp = HttpResponse::Ok()
-            .header(header::CONTENT_TYPE, "application/javascript; charset=UTF-8")
-            .force_close()
+            .header(
+                header::CONTENT_TYPE,
+                "application/javascript; charset=UTF-8",
+            ).force_close()
             .sockjs_no_cache()
             .sockjs_session_cookie(&req)
             .sockjs_cors_headers(req.headers())
@@ -123,10 +126,12 @@ impl<S, SM> Xhr<S, SM>
         let mut ctx = HttpContext::from_request(req);
 
         // init transport
-        let mut transport = Xhr{s: PhantomData,
-                                sm: PhantomData,
-                                rec: None,
-                                flags: Flags::empty()};
+        let mut transport = Xhr {
+            s: PhantomData,
+            sm: PhantomData,
+            rec: None,
+            flags: Flags::empty(),
+        };
         transport.init_transport(session, &mut ctx);
 
         Ok(resp.body(ctx.actor(transport)))
@@ -134,7 +139,9 @@ impl<S, SM> Xhr<S, SM>
 }
 
 impl<S, SM> Handler<ChannelItem> for Xhr<S, SM>
-    where S: Session, SM: SessionManager<S>,
+where
+    S: Session,
+    SM: SessionManager<S>,
 {
     type Result = ();
 
@@ -144,7 +151,9 @@ impl<S, SM> Handler<ChannelItem> for Xhr<S, SM>
 }
 
 impl<S, SM> Handler<Broadcast> for Xhr<S, SM>
-    where S: Session, SM: SessionManager<S>,
+where
+    S: Session,
+    SM: SessionManager<S>,
 {
     type Result = ();
 

@@ -2,29 +2,29 @@ use actix::*;
 use actix_web::*;
 
 use context::ChannelItem;
-use protocol::{Frame, CloseCode};
+use manager::{Acquire, Broadcast, Record, Release, SessionManager};
+use protocol::{CloseCode, Frame};
 use session::{Session, SessionState};
-use manager::{Acquire, Release, Broadcast, Record, SessionManager};
 
+mod eventsource;
+mod htmlfile;
+mod jsonp;
+mod rawwebsocket;
+mod websocket;
 mod xhr;
 mod xhrsend;
 mod xhrstreaming;
-mod eventsource;
-mod jsonp;
-mod htmlfile;
-mod websocket;
-mod rawwebsocket;
 
+pub use self::eventsource::EventSource;
+pub use self::htmlfile::HTMLFile;
+pub use self::jsonp::{JSONPolling, JSONPollingSend};
+pub use self::rawwebsocket::RawWebsocket;
+pub use self::websocket::Websocket;
 pub use self::xhr::Xhr;
 pub use self::xhrsend::XhrSend;
 pub use self::xhrstreaming::XhrStreaming;
-pub use self::eventsource::EventSource;
-pub use self::htmlfile::HTMLFile;
-pub use self::websocket::Websocket;
-pub use self::rawwebsocket::RawWebsocket;
-pub use self::jsonp::{JSONPolling, JSONPollingSend};
 
-pub const MAXSIZE: usize = 131_072;  // 128K bytes
+pub const MAXSIZE: usize = 131_072; // 128K bytes
 
 bitflags! {
     pub struct Flags: u8 {
@@ -44,9 +44,11 @@ pub enum SendResult {
     Stop,
 }
 
-trait Transport<S, SM>: Actor<Context=TransportContext<Self, SM>> +
-    Handler<ChannelItem> + Handler<Broadcast>
-    where S: Session, SM: SessionManager<S>,
+trait Transport<S, SM>:
+    Actor<Context = TransportContext<Self, SM>> + Handler<ChannelItem> + Handler<Broadcast>
+where
+    S: Session,
+    SM: SessionManager<S>,
 {
     /// Session flags
     fn flags(&mut self) -> &mut Flags;
@@ -60,7 +62,7 @@ trait Transport<S, SM>: Actor<Context=TransportContext<Self, SM>> +
             if !ctx.connected() {
                 rec.interrupted();
             }
-            ctx.state().do_send(Release{ses: rec});
+            ctx.state().do_send(Release { ses: rec });
         }
         ctx.stop();
     }
@@ -115,8 +117,12 @@ trait Transport<S, SM>: Actor<Context=TransportContext<Self, SM>> +
     }
 
     /// Send sockjs frame
-    fn send(&mut self, ctx: &mut TransportContext<Self, SM>, msg: &Frame, record: &mut Record)
-            -> SendResult;
+    fn send(
+        &mut self,
+        ctx: &mut TransportContext<Self, SM>,
+        msg: &Frame,
+        record: &mut Record,
+    ) -> SendResult;
 
     /// Send close frame
     fn send_close(&mut self, ctx: &mut TransportContext<Self, SM>, code: CloseCode);
@@ -125,12 +131,15 @@ trait Transport<S, SM>: Actor<Context=TransportContext<Self, SM>> +
     fn send_heartbeat(&mut self, ctx: &mut TransportContext<Self, SM>);
 
     /// Send sockjs frame
-    fn send_buffered(&mut self, ctx: &mut TransportContext<Self, SM>, record: &mut Record)
-                     -> SendResult {
+    fn send_buffered(
+        &mut self,
+        ctx: &mut TransportContext<Self, SM>,
+        record: &mut Record,
+    ) -> SendResult {
         while !record.buffer.is_empty() {
             if let Some(msg) = record.buffer.pop_front() {
                 if let SendResult::Stop = self.send(ctx, msg.as_ref(), record) {
-                    return SendResult::Stop
+                    return SendResult::Stop;
                 }
             }
         }

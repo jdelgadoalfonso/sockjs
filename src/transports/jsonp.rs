@@ -125,7 +125,9 @@ where
 
         if let Some(callback) = req.query().get("c").map(|s| s.to_owned()) {
             if !CHECK.is_match(&callback) {
-                return Ok(HttpResponse::InternalServerError().body("invalid \"callback\" parameter"));
+                return Ok(
+                    HttpResponse::InternalServerError().body("invalid \"callback\" parameter")
+                );
             }
 
             let session = req.match_info().get("session").unwrap().to_owned();
@@ -274,8 +276,7 @@ where
                                 .send(SessionMessage {
                                     sid: Arc::clone(&sid),
                                     msg: Message(last),
-                                })
-                                .from_err()
+                                }).from_err()
                                 .and_then(move |res| match res {
                                     Ok(_) => Ok(HttpResponse::Ok()
                                         .content_type("text/plain; charset=UTF-8")

@@ -1,18 +1,20 @@
-use std::sync::Arc;
-use std::ops::Deref;
+use futures::sync::mpsc::{unbounded, UnboundedReceiver, UnboundedSender};
 use std::collections::{HashMap, HashSet, VecDeque};
-use std::time::{Instant, Duration};
-use futures::sync::mpsc::{unbounded, UnboundedSender, UnboundedReceiver};
+use std::ops::Deref;
+use std::sync::Arc;
+use std::time::{Duration, Instant};
 
-use actix::*;
 use actix::Message as ActixMessage;
+use actix::*;
+use context::{ChannelItem, SockJSChannel, SockJSContext};
 use protocol::Frame;
-use context::{SockJSContext, SockJSChannel, ChannelItem};
-use session::{Message, Session, SessionState, SessionError, CloseReason};
+use session::{CloseReason, Message, Session, SessionError, SessionState};
 
 #[doc(hidden)]
-pub trait SessionManager<S>: Actor<Context=Context<Self>> +
-    Handler<Acquire> + Handler<Release> + Handler<SessionMessage> {}
+pub trait SessionManager<S>:
+    Actor<Context = Context<Self>> + Handler<Acquire> + Handler<Release> + Handler<SessionMessage>
+{
+}
 
 /// Acquire message
 pub struct Acquire {
@@ -21,7 +23,10 @@ pub struct Acquire {
 }
 impl Acquire {
     pub fn new(sid: String, addr: Recipient<Syn, Broadcast>) -> Self {
-        Acquire{addr, sid: Arc::new(sid)}
+        Acquire {
+            addr,
+            sid: Arc::new(sid),
+        }
     }
 }
 
@@ -54,13 +59,15 @@ pub struct Broadcast {
 
 impl Broadcast {
     pub fn new(frm: Frame) -> Broadcast {
-        Broadcast {msg: Arc::new(frm)}
+        Broadcast { msg: Arc::new(frm) }
     }
 }
 
 impl Clone for Broadcast {
     fn clone(&self) -> Broadcast {
-        Broadcast {msg: Arc::clone(&self.msg)}
+        Broadcast {
+            msg: Arc::clone(&self.msg),
+        }
     }
 }
 
@@ -123,7 +130,8 @@ pub struct Record {
 impl Record {
     fn new(sid: Arc<String>, tx: UnboundedSender<SockJSChannel>) -> Record {
         Record {
-            sid, tx,
+            sid,
+            tx,
             state: SessionState::New,
             buffer: VecDeque::new(),
         }
@@ -172,9 +180,9 @@ impl<S: Session + Default> Default for SockJSManager<S> {
 }
 
 impl<S: Session> SockJSManager<S> {
-
     pub fn new<F>(factory: F) -> Self
-        where F: Sync + Send + 'static + Fn() -> S,
+    where
+        F: Sync + Send + 'static + Fn() -> S,
     {
         SockJSManager {
             factory: Box::new(factory),
@@ -201,8 +209,9 @@ impl<S: Session> SockJSManager<S> {
                 act.idle.remove(&sid);
                 if let Some(entry) = act.sessions.remove(&sid) {
                     if let Some(rec) = entry.record {
-                        let _ = rec.tx.unbounded_send(
-                            SockJSChannel::Closed(CloseReason::Expired));
+                        let _ = rec
+                            .tx
+                            .unbounded_send(SockJSChannel::Closed(CloseReason::Expired));
                     }
                 }
             }
@@ -229,20 +238,22 @@ impl<S: Session> Handler<Acquire> for SockJSManager<S> {
                 let _ = rec.tx.unbounded_send(SockJSChannel::Acquired(tx));
                 self.idle.remove(&msg.sid);
                 entry.transport = Some(msg.addr);
-                return Ok((rec, rx))
+                return Ok((rec, rx));
             } else {
-                return Err(SessionError::Acquired)
+                return Err(SessionError::Acquired);
             }
         }
-        let (addr, tx) = SockJSContext::start(
-            (*self.factory)(), Arc::clone(&msg.sid), ctx.address());
+        let (addr, tx) =
+            SockJSContext::start((*self.factory)(), Arc::clone(&msg.sid), ctx.address());
         self.sessions.insert(
             Arc::clone(&msg.sid),
-            Entry{addr,
-                  record: None,
-                  transport: Some(msg.addr),
-                  tick: Instant::now(),
-            });
+            Entry {
+                addr,
+                record: None,
+                transport: Some(msg.addr),
+                tick: Instant::now(),
+            },
+        );
         let rec = Record::new(msg.sid, tx);
         let (tx, rx) = unbounded();
         let _ = rec.tx.unbounded_send(SockJSChannel::Opened);
@@ -259,13 +270,15 @@ impl<S: Session> Handler<Release> for SockJSManager<S> {
         if let Some(entry) = self.sessions.get_mut(&msg.ses.sid) {
             self.idle.insert(Arc::clone(&msg.ses.sid));
             let _ = match msg.ses.state {
-                SessionState::Closed =>
-                    msg.ses.tx.unbounded_send(
-                        SockJSChannel::Closed(CloseReason::Normal)),
-                SessionState::Interrupted =>
-                    msg.ses.tx.unbounded_send(
-                        SockJSChannel::Closed(CloseReason::Interrupted)),
-                _ => msg.ses.tx.unbounded_send(SockJSChannel::Released)
+                SessionState::Closed => msg
+                    .ses
+                    .tx
+                    .unbounded_send(SockJSChannel::Closed(CloseReason::Normal)),
+                SessionState::Interrupted => msg
+                    .ses
+                    .tx
+                    .unbounded_send(SockJSChannel::Closed(CloseReason::Interrupted)),
+                _ => msg.ses.tx.unbounded_send(SockJSChannel::Released),
             };
             entry.tick = Instant::now();
             entry.record = Some(msg.ses);
@@ -296,7 +309,7 @@ impl<S: Session> Handler<Broadcast> for SockJSManager<S> {
         for entry in self.sessions.values_mut() {
             if let Some(ref tr) = entry.transport {
                 let _ = tr.send(msg.clone());
-                continue
+                continue;
             }
             if let Some(ref mut rec) = entry.record {
                 rec.add(Arc::clone(&msg.msg));

@@ -1,19 +1,19 @@
-use std::time::Duration;
 use std::marker::PhantomData;
+use std::time::Duration;
 
 use actix::*;
-use actix_web::*;
 use actix_web::http::Method;
-use serde_json;
+use actix_web::*;
 use regex::Regex;
+use serde_json;
 
 use context::ChannelItem;
-use protocol::{Frame, CloseCode};
-use utils::SockjsHeaders;
-use session::Session;
 use manager::{Broadcast, Record, SessionManager};
+use protocol::{CloseCode, Frame};
+use session::Session;
+use utils::SockjsHeaders;
 
-use super::{Transport, SendResult, Flags};
+use super::{Flags, SendResult, Transport};
 
 const PRELUDE1: &str = r#"
 <!doctype html>
@@ -33,9 +33,10 @@ const PRELUDE2: &str = r#";
 
 const PRELUDE3: &[u8] = &[b' '; 1024];
 
-
 pub struct HTMLFile<S, SM>
-    where S: Session, SM: SessionManager<S>,
+where
+    S: Session,
+    SM: SessionManager<S>,
 {
     s: PhantomData<S>,
     sm: PhantomData<SM>,
@@ -46,7 +47,9 @@ pub struct HTMLFile<S, SM>
 }
 
 impl<S, SM> HTMLFile<S, SM>
-    where S: Session, SM: SessionManager<S>,
+where
+    S: Session,
+    SM: SessionManager<S>,
 {
     // start heartbeats
     fn hb(&self, ctx: &mut HttpContext<Self, Addr<Syn, SM>>) {
@@ -69,13 +72,12 @@ impl<S, SM> HTMLFile<S, SM>
             static ref CHECK: Regex = Regex::new(r"^[a-zA-Z0-9_\.]+$").unwrap();
         }
         if *req.method() != Method::GET {
-            return Ok(HttpResponse::NotFound().into())
+            return Ok(HttpResponse::NotFound().into());
         }
 
         if let Some(callback) = req.query().get("c").map(|s| s.to_owned()) {
             if !CHECK.is_match(&callback) {
-                return Ok(HttpResponse::InternalServerError().body(
-                    "invalid \"callback\" parameter"))
+                return Ok(HttpResponse::InternalServerError().body("invalid \"callback\" parameter"));
             }
 
             let session = req.match_info().get("session").unwrap().to_owned();
@@ -88,11 +90,16 @@ impl<S, SM> HTMLFile<S, SM>
                 .take();
 
             let mut ctx = HttpContext::new(
-                req, HTMLFile{s: PhantomData,
-                              sm: PhantomData,
-                              size: 0, rec: None,
-                              maxsize,
-                              flags: Flags::empty()});
+                req,
+                HTMLFile {
+                    s: PhantomData,
+                    sm: PhantomData,
+                    size: 0,
+                    rec: None,
+                    maxsize,
+                    flags: Flags::empty(),
+                },
+            );
             ctx.write(PRELUDE1);
             ctx.write(callback);
             ctx.write(PRELUDE2);
@@ -109,15 +116,16 @@ impl<S, SM> HTMLFile<S, SM>
 
             Ok(resp.body(ctx))
         } else {
-            Ok(HttpResponse::InternalServerError()
-               .body("\"callback\" parameter required"))
+            Ok(HttpResponse::InternalServerError().body("\"callback\" parameter required"))
         }
     }
 }
 
 // Http actor implementation
 impl<S, SM> Actor for HTMLFile<S, SM>
-    where S: Session, SM: SessionManager<S>
+where
+    S: Session,
+    SM: SessionManager<S>,
 {
     type Context = HttpContext<Self, Addr<Syn, SM>>;
 
@@ -129,15 +137,15 @@ impl<S, SM> Actor for HTMLFile<S, SM>
 
 // Transport implementation
 impl<S, SM> Transport<S, SM> for HTMLFile<S, SM>
-    where S: Session, SM: SessionManager<S>,
+where
+    S: Session,
+    SM: SessionManager<S>,
 {
-    fn send(&mut self, ctx: &mut Self::Context, msg: &Frame, rec: &mut Record)
-            -> SendResult
-    {
+    fn send(&mut self, ctx: &mut Self::Context, msg: &Frame, rec: &mut Record) -> SendResult {
         match *msg {
             Frame::Heartbeat => {
                 self.write("h", ctx);
-            },
+            }
             Frame::Message(ref s) => {
                 let blob = format!("a[{}]", serde_json::to_string(&s).unwrap());
                 self.write(&blob, ctx);
@@ -145,18 +153,16 @@ impl<S, SM> Transport<S, SM> for HTMLFile<S, SM>
             Frame::MessageVec(ref s) => {
                 self.write(s, ctx);
             }
-            Frame::MessageBlob(_) => {
-                unimplemented!()
-            }
+            Frame::MessageBlob(_) => unimplemented!(),
             Frame::Open => {
                 self.write("o", ctx);
-            },
+            }
             Frame::Close(code) => {
                 rec.close();
                 let blob = format!("c[{},{:?}]", code.num(), code.reason());
                 self.write(&blob, ctx);
                 ctx.write_eof();
-                return SendResult::Stop
+                return SendResult::Stop;
             }
         };
 
@@ -186,7 +192,9 @@ impl<S, SM> Transport<S, SM> for HTMLFile<S, SM>
 }
 
 impl<S, SM> Handler<ChannelItem> for HTMLFile<S, SM>
-    where S: Session, SM: SessionManager<S>,
+where
+    S: Session,
+    SM: SessionManager<S>,
 {
     type Result = ();
 
@@ -196,7 +204,9 @@ impl<S, SM> Handler<ChannelItem> for HTMLFile<S, SM>
 }
 
 impl<S, SM> Handler<Broadcast> for HTMLFile<S, SM>
-    where S: Session, SM: SessionManager<S>
+where
+    S: Session,
+    SM: SessionManager<S>,
 {
     type Result = ();
 

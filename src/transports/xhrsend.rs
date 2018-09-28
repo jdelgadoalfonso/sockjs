@@ -89,8 +89,7 @@ where
                                 .send(SessionMessage {
                                     sid: Arc::clone(&sid),
                                     msg: Message(last),
-                                })
-                                .from_err()
+                                }).from_err()
                                 .and_then(move |res| match res {
                                     Ok(_) => Ok(HttpResponse::NoContent()
                                         .content_type("text/plain; charset=UTF-8")
