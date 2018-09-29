@@ -33,7 +33,7 @@ bitflags! {
     }
 }
 
-type TransportContext<T, SM> = HttpContext<T, Addr<Syn, SM>>;
+type TransportContext<T, SM> = HttpContext<T, Addr<SM>>;
 
 /// Result of `Transport::send` method
 #[derive(PartialEq)]
@@ -148,7 +148,7 @@ where
 
     fn init_transport(&mut self, session: String, ctx: &mut TransportContext<Self, SM>) {
         // acquire session
-        let addr: Addr<Syn, _> = ctx.address();
+        let addr: Addr<_> = ctx.address();
         ctx.state().send(Acquire::new(session, addr.recipient()))
             .into_actor(self)
             .map(|res, act, ctx| {

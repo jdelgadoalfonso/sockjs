@@ -52,14 +52,14 @@ where
     SM: SessionManager<S>,
 {
     // start heartbeats
-    fn hb(&self, ctx: &mut HttpContext<Self, Addr<Syn, SM>>) {
+    fn hb(&self, ctx: &mut HttpContext<Self, Addr<SM>>) {
         ctx.run_later(Duration::new(5, 0), |act, ctx| {
             act.send_heartbeat(ctx);
             act.hb(ctx);
         });
     }
 
-    fn write(&mut self, s: &str, ctx: &mut HttpContext<Self, Addr<Syn, SM>>) {
+    fn write(&mut self, s: &str, ctx: &mut HttpContext<Self, Addr<SM>>) {
         let b = serde_json::to_string(s).unwrap();
         self.size += b.len() + 25;
         ctx.write("<script>\np(");
@@ -67,7 +67,7 @@ where
         ctx.write(");\n</script>\r\n");
     }
 
-    pub fn init(req: HttpRequest<Addr<Syn, SM>>, maxsize: usize) -> Result<HttpResponse> {
+    pub fn init(req: HttpRequest<Addr<SM>>, maxsize: usize) -> Result<HttpResponse> {
         lazy_static! {
             static ref CHECK: Regex = Regex::new(r"^[a-zA-Z0-9_\.]+$").unwrap();
         }
@@ -77,7 +77,9 @@ where
 
         if let Some(callback) = req.query().get("c").map(|s| s.to_owned()) {
             if !CHECK.is_match(&callback) {
-                return Ok(HttpResponse::InternalServerError().body("invalid \"callback\" parameter"));
+                return Ok(
+                    HttpResponse::InternalServerError().body("invalid \"callback\" parameter")
+                );
             }
 
             let session = req.match_info().get("session").unwrap().to_owned();
@@ -127,7 +129,7 @@ where
     S: Session,
     SM: SessionManager<S>,
 {
-    type Context = HttpContext<Self, Addr<Syn, SM>>;
+    type Context = HttpContext<Self, Addr<SM>>;
 
     fn stopping(&mut self, ctx: &mut Self::Context) -> Running {
         self.release(ctx);

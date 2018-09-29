@@ -19,10 +19,10 @@ pub trait SessionManager<S>:
 /// Acquire message
 pub struct Acquire {
     sid: Arc<String>,
-    addr: Recipient<Syn, Broadcast>,
+    addr: Recipient<Broadcast>,
 }
 impl Acquire {
-    pub fn new(sid: String, addr: Recipient<Syn, Broadcast>) -> Self {
+    pub fn new(sid: String, addr: Recipient<Broadcast>) -> Self {
         Acquire {
             addr,
             sid: Arc::new(sid),
@@ -153,9 +153,9 @@ impl Record {
 }
 
 struct Entry<S: Session> {
-    addr: Addr<Syn, S>,
+    addr: Addr<S>,
     record: Option<Record>,
-    transport: Option<Recipient<Syn, Broadcast>>,
+    transport: Option<Recipient<Broadcast>>,
     /// heartbeat
     tick: Instant,
 }

@@ -64,7 +64,7 @@ where
     S: Session,
     SM: SessionManager<S>,
 {
-    pub fn init(req: HttpRequest<Addr<Syn, SM>>, maxsize: usize) -> Result<HttpResponse> {
+    pub fn init(req: HttpRequest<Addr<SM>>, maxsize: usize) -> Result<HttpResponse> {
         if *req.method() == Method::OPTIONS {
             return Ok(HttpResponse::NoContent()
                 .content_type("application/jsonscript; charset=UTF-8")
@@ -117,7 +117,7 @@ where
     S: Session,
     SM: SessionManager<S>,
 {
-    type Context = HttpContext<Self, Addr<Syn, SM>>;
+    type Context = HttpContext<Self, Addr<SM>>;
 
     fn stopping(&mut self, ctx: &mut Self::Context) -> Running {
         self.release(ctx);

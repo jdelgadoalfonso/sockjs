@@ -28,7 +28,7 @@ where
     S: Session,
     SM: SessionManager<S>,
 {
-    pub fn init(req: HttpRequest<Addr<Syn, SM>>) -> Result<HttpResponse> {
+    pub fn init(req: HttpRequest<Addr<SM>>) -> Result<HttpResponse> {
         let mut resp = ws::handshake(&req)?;
         let session = req.match_info().get("session").unwrap().to_owned();
 
@@ -49,7 +49,7 @@ where
 
     fn send(
         &mut self,
-        ctx: &mut ws::WebsocketContext<Self, Addr<Syn, SM>>,
+        ctx: &mut ws::WebsocketContext<Self, Addr<SM>>,
         msg: &Frame,
         record: &mut Record,
     ) -> SendResult {
@@ -78,7 +78,7 @@ where
         SendResult::Continue
     }
 
-    fn send_close(&mut self, ctx: &mut ws::WebsocketContext<Self, Addr<Syn, SM>>, code: CloseCode) {
+    fn send_close(&mut self, ctx: &mut ws::WebsocketContext<Self, Addr<SM>>, code: CloseCode) {
         ctx.text(format!("c[{},{:?}]", code.num(), code.reason()));
     }
 
@@ -91,7 +91,7 @@ where
     }
 
     /// Stop transport and release session
-    fn release(&mut self, ctx: &mut ws::WebsocketContext<Self, Addr<Syn, SM>>) {
+    fn release(&mut self, ctx: &mut ws::WebsocketContext<Self, Addr<SM>>) {
         if let Some(mut rec) = self.session_record().take() {
             if !ctx.connected() {
                 rec.interrupted();
@@ -101,11 +101,7 @@ where
         ctx.stop();
     }
 
-    fn handle_message(
-        &mut self,
-        msg: ChannelItem,
-        ctx: &mut ws::WebsocketContext<Self, Addr<Syn, SM>>,
-    ) {
+    fn handle_message(&mut self, msg: ChannelItem, ctx: &mut ws::WebsocketContext<Self, Addr<SM>>) {
         match msg {
             ChannelItem::Frame(msg) => {
                 if let Some(mut rec) = self.session_record().take() {
@@ -143,7 +139,7 @@ where
     /// Send sockjs frame
     fn send_buffered(
         &mut self,
-        ctx: &mut ws::WebsocketContext<Self, Addr<Syn, SM>>,
+        ctx: &mut ws::WebsocketContext<Self, Addr<SM>>,
         record: &mut Record,
     ) -> SendResult {
         while !record.buffer.is_empty() {
@@ -156,13 +152,9 @@ where
         SendResult::Continue
     }
 
-    fn init_transport(
-        &mut self,
-        session: String,
-        ctx: &mut ws::WebsocketContext<Self, Addr<Syn, SM>>,
-    ) {
+    fn init_transport(&mut self, session: String, ctx: &mut ws::WebsocketContext<Self, Addr<SM>>) {
         // acquire session
-        let addr: Addr<Syn, _> = ctx.address();
+        let addr: Addr<_> = ctx.address();
         ctx.state().send(Acquire::new(session, addr.recipient()))
             .into_actor(self)
             .map(|res, act, ctx| {
@@ -227,7 +219,7 @@ where
     S: Session,
     SM: SessionManager<S>,
 {
-    type Context = ws::WebsocketContext<Self, Addr<Syn, SM>>;
+    type Context = ws::WebsocketContext<Self, Addr<SM>>;
 
     fn stopping(&mut self, ctx: &mut Self::Context) -> Running {
         if let Some(mut rec) = self.rec.take() {
